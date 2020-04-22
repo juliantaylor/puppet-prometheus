@@ -179,7 +179,9 @@ class prometheus::config {
       }
     }
     'systemd': {
-      systemd::unit_file {'prometheus.service':
+      file { '/etc/systemd/system/prometheus.service':
+        owner   => 'root',
+        notify  => $notify,
         content => epp("${module_name}/prometheus.systemd.epp", {
           'user'           => $prometheus::server::user,
           'group'          => $prometheus::server::group,
@@ -187,12 +189,16 @@ class prometheus::config {
           'max_open_files' => $max_open_files,
           'bin_dir'        => $prometheus::server::bin_dir,
         }),
-        notify  => $notify,
       }
       if versioncmp($facts['puppetversion'],'6.1.0') < 0 {
         # Puppet 5 doesn't have https://tickets.puppetlabs.com/browse/PUP-3483
-        # and camptocamp/systemd only creates this relationship when managing the service
-        Class['systemd::systemctl::daemon_reload'] -> Class['prometheus::run_service']
+        exec { 'prometheus-systemd-reload':
+          command     => 'systemctl daemon-reload',
+          path        => [ '/usr/bin', '/bin', '/usr/sbin' ],
+          refreshonly => true,
+          subscribe   => File['/etc/systemd/system/prometheus.service'],
+        }
+        Exec['prometheus-systemd-reload'] -> Class['prometheus::run_service']
       }
     }
     'sysv', 'redhat', 'debian', 'sles': {
